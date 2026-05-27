@@ -1,0 +1,6 @@
+[submodule "backend"]
+	path = backend
+	url = git@github.com:gabrielsdw/plataforma-empregos-pie-backend
+[submodule "frontend"]
+	path = frontend
+	url = git@github.com:gabrielsdw/plataforma-empregos-pie-frontend

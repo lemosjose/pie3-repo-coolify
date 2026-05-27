@@ -1,0 +1,122 @@
+# Repositório de Deploy - PIE - Docker Compose Unificado
+# 
+# Este é o ÚNICO arquivo docker-compose que você deve usar para produção.
+# NÃO utilize o backend/docker-compose.yml ou composes dos submódulos aqui.
+# Todos os serviços rodam em uma rede interna; apenas o Nginx na porta 80 é exposto para o host.
+#
+# Uso:
+#   docker compose up --build -d
+#   docker compose logs -f
+#   docker compose down
+
+version: '3.8'
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
+services:
+  nginx:
+    image: nginx:stable
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - api
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    container_name: pie-frontend
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - app-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pie-backend
+    volumes:
+      - ./backend:/var/www
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    labels:
+      - "autoheal=true"
+    command: sh -c "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:17
+    container_name: pie-postgres
+    environment:
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_DATABASE}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - app-network
+    mem_limit: 512m
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_CLEANUP_INTERVAL=60
+    networks:
+      - app-network
