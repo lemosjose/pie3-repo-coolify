@@ -60,12 +60,8 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: docker/php/Dockerfile
     container_name: pie-backend
-    volumes:
-      - ./backend:/var/www
-    env_file:
-      - ./backend/.env
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
